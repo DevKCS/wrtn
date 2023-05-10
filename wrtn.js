@@ -27,6 +27,57 @@ export class wrtn {
             throw new Error("Login failed.")
         }
     }
+
+    async loginByEmail(email,password) {
+        try {
+            const response = await axios.post("https://api.wow.wrtn.ai/auth/local", {
+                email: email,
+                password: password
+            }, {
+                "headers": {
+                    "accept": "application/json, text/plain, */*",
+                    "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
+                    "authorization": "Bearer undefined",
+                    "content-type": "application/json",
+                    "sec-ch-ua": "\"Chromium\";v=\"112\", \"Google Chrome\";v=\"112\", \"Not:A-Brand\";v=\"99\"",
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": "\"Windows\"",
+                    "sec-fetch-dest": "empty",
+                    "sec-fetch-mode": "cors",
+                    "sec-fetch-site": "same-site",
+                    "Referer": "https://wrtn.ai/",
+                    "Referrer-Policy": "strict-origin-when-cross-origin"
+                },
+            });
+            this.access_token = response.data.data.accessToken;
+            this.refresh_token = response.data.data.refreshToken;
+            await this.Login();
+            return true;
+        } catch (e) {
+            throw new Error("Login failed.")
+        }
+    }
+
+    /**
+     * @param {String} email
+     * @returns {Promise<String>}
+     */
+    async checkEmail(email) {
+        try {
+            const response = await axios.get("https://api.wow.wrtn.ai/auth/check?email="+email, {
+                headers: {
+                    "accept": "application/json, text/plain, */*",
+                    "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
+                    "authorization": "Bearer undefined",
+                },
+            });
+            let data = response.data
+            return data;
+        } catch (e) {
+            throw new Error("Unknown error.")
+        }
+    }
+
     /**
      * @returns {Promise<String>} 방 ID를 반환합니다.
      */
@@ -113,27 +164,19 @@ export class wrtn {
                 headers: {
                     'Authorization': 'Bearer ' + this.loginToken,
                     'Content-Type': 'application/json'
-                },
-                responseType: 'stream'
-            });
-
-            let data = '';
-            response.data.on('data', (chunk) => {
-                chunk = chunk.toString();
-                if (chunk.includes("message")) {
-                    data += (chunk.slice(chunk.indexOf(`"chunk":"`) + 9, chunk.indexOf(`","ms"`)));
                 }
             });
+            let arr = response.data.trim().split('\n\n')
+            arr.shift();
+            return arr.map(e => {
+                const data = e.split('\n')[1].match(/data: (.*)/s)
 
-            return new Promise((resolve, reject) => {
-                response.data.on('end', () => {
-                    if (data == "") throw new Error("No roomId was found.")
-                    resolve(data);
-                });
-                response.data.on('error', (err) => {
-                    reject(err);
-                });
-            });
+                if (data === null) throw new Error("No roomId was found.")
+
+                const raw = JSON.parse(data[1])
+
+                return raw.chunk;
+            }).join('')
         } catch (e) {
             throw new Error("No roomId was found.")
         }
@@ -154,26 +197,18 @@ export class wrtn {
                     'Authorization': 'Bearer ' + this.loginToken,
                     'Content-Type': 'application/json'
                 },
-                responseType: 'stream'
             });
+            let arr = response.data.trim().split('\n\n')
+            arr.shift();
+            return arr.map(e => {
+                const data = e.split('\n')[1].match(/data: (.*)/s)
 
-            let data = '';
-            response.data.on('data', (chunk) => {
-                chunk = chunk.toString();
-                if (chunk.includes("message") && chunk.includes("chunk")){
-                    data += (chunk.slice(chunk.indexOf(`"chunk":"`) + 9, chunk.indexOf(`","ms"`)));
-                }
-            });
+                if (data === null) throw new Error("No roomId was found.")
 
-            return new Promise((resolve, reject) => {
-                response.data.on('end', () => {
-                    if (data == "") throw new Error("No roomId was found.")
-                    resolve(data);
-                });
-                response.data.on('error', (err) => {
-                    reject(err);
-                });
-            });
+                const raw = JSON.parse(data[1])
+
+                return raw.chunk;
+            }).join('')
         } catch (e) {
             throw new Error("No roomId was found.")
         }
@@ -265,177 +300,58 @@ export class wrtn {
         }
     }
 }
-export class editor {
-    constructor(access_token, refresh_token) {
-        this.access_token = access_token;
-        this.refresh_token = refresh_token;
-    }
-    /**
-     * @returns {Promise<Boolean>>} 로그인을 시도합니다.
-     */
-    async Login() {
-        try {
-            const response = await axios.get("https://wrtn.ai/", {
-                headers: {
-                    cookie: "refresh_token=" + this.refresh_token + "; access_token=" + this.access_token,
-                },
-            });
-            let data = JSON.parse(
-                response.data.slice(
-                    response.data.indexOf(`<script id="__NEXT_DATA__" type="application/json">`) + 51,
-                    response.data.indexOf("</script></body></html>")
-                )
-            );
-            this.loginToken = data.props.pageProps.accessKey;
-            return true;
-        } catch (e) {
-            throw new Error("Login failed.")
-        }
-    }
-    async roomList() {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        try {
-            const response = await axios.get("https://api.wrtn.ai/doc?page=1&limit=100", {
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'authorization': "Bearer " + this.loginToken,
-                },
-            });
-            let roomList = response.data.data.map((e) => {
-                return {
-                    id: e._id,
-                    title:e.title,
-                    topic: e.topic
-                }
-            })
-            return roomList
-        } catch (e) {
-            throw new Error("Login failed.")
-        }
-    }
-    async addRoom(title,topic) {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        try {
-            const response = (await axios.post("https://api.wrtn.ai/doc", null, {
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5',
-                    'authorization': 'Bearer ' + this.loginToken,
-                    'sec-ch-ua': '"Chromium";v="112", "Google Chrome";v="112", "Not:A-Brand";v="99"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"Windows"',
-                    'sec-fetch-dest': 'empty',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-site': 'same-site',
-                    'Referer': 'https://wrtn.ai/',
-                    'Referrer-Policy': 'strict-origin-when-cross-origin'
-                }
-            }))
-            if (response.status == 201) {
-                await this.setTitle(title, response.data.data._id)
-                await this.setTopic(topic, response.data.data._id)
-                return response.data.data._id;
+
+function generateGAClientId() {
+    var timestamp = Math.floor(Date.now() / 1000); // 현재 시간을 초 단위로 변환
+    var randomNumber = Math.floor(Math.random() * 10000000000); // 0부터 9999999999 사이의 랜덤한 정수 생성
+    var clientId = "GA1.1." + randomNumber + "." + timestamp; // 클라이언트 ID 문자열 생성
+
+    return clientId;
+}
+export async function addAccount(email, password) {
+    try {
+        const emailCheck = (await axios.get('https://api.wow.wrtn.ai/auth/check?email=' + email,{
+            "headers": {
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
+                "authorization": "Bearer undefined",
+                "content-type": "application/json",
+                "sec-ch-ua": "\"Chromium\";v=\"112\", \"Google Chrome\";v=\"112\", \"Not:A-Brand\";v=\"99\"",
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": "\"Windows\"",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "Referer": "https://wrtn.ai/",
+                "Referrer-Policy": "strict-origin-when-cross-origin"
             }
-            throw new Error("Login failed.")
-        }
-         catch (e) {
-            throw new Error("Login failed.")
-        }
-    }
-    async setTopic(topic, roomId) {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        try {
-            const response = await axios.put("https://api.wrtn.ai/doc/"+roomId,{
-                "topic": topic,
-                "category": "선택 안 함",
-                "connect": "선택_안함"
-            }, {
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'authorization': "Bearer " + this.loginToken,
-                },
-            });
-            if(response.status == 200) return true;
-            else return false;
-        } catch (e) {
-            throw new Error("No roomId was found.")
-        }
-    }
-    async setTitle(title, roomId) {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        try {
-            const response = await axios.put("https://api.wrtn.ai/doc/"+roomId,{
-                title:title
-            }, {
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'authorization': "Bearer " + this.loginToken,
-                },
-            });
-            if(response.status == 200) return true;
-            else return false;
-        } catch (e) {
-            throw new Error("No roomId was found.")
-        }
-    }
-    async generate(roomId) {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        try {
-            let dat = (await axios.get("https://api.wrtn.ai/doc/"+roomId, {
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'authorization': "Bearer " + this.loginToken,
-                },
-            })).data;
-            let content = dat.data.content;
-            const response = await axios.post("https://gen-api-prod.wrtn.ai/generate/editor",{
-                "inputs": [
-                    dat.data.topic,
-                    "선택 안 함",
-                    content.root.children[0].children[content.root.children[0].children.length-2]?.text == undefined ? content.root.children[0].children[0].text : content.root.children[0].children[content.root.children[0].children.length-2].text
-                ],
-                "connect": "선택 안 함",
-                "docId": roomId,
-                "command": "이어쓰기"
-            }, {
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'authorization': "Bearer " + this.loginToken,
-                },
-            });
-            if(response.status == 201) {
-                content.root.children[0].children[content.root.children[0].children.length-2]?.type == undefined ? content.root.children[0].children[0].type : content.root.children[0].children[content.root.children[0].children.length-2].type = "text"
-                if(content.root.children[0].children.length >= 2) content.root.children[0].children.pop()
-                content.root.children[0].children.push({
-                    "detail": 0,
-                    "format": 0,
-                    "mode": "normal",
-                    "style": "",
-                    "text": response.data.data.output,
-                    "type": "HighlightText",
-                    "version": 1,
-                    "className": "WrtnEditor_highlightText"
-                })
-                content.root.children[0].children.push({
-                    "detail": 0,
-                    "format": 0,
-                    "mode": "normal",
-                    "style": "",
-                    "text": " ",
-                    "type": "text",
-                    "version": 1
-                })
-                await axios.put("https://api.wrtn.ai/doc/"+roomId,{content:content}, {
-                    headers: {
-                        'accept': 'application/json, text/plain, */*',
-                        'authorization': "Bearer " + this.loginToken,
-                    }
-                });
-                return response.data.data.output;
+
+        })).data
+        if (emailCheck.result != "SUCCESS") throw new Error("Email already exists.")
+        if (emailCheck.data != null) throw new Error("Email already exists.")
+
+        const response = await axios.post('https://api.wow.wrtn.ai/auth/register?deviceId='+generateGAClientId(), {
+            email: email,
+            password: password,
+        }, {
+            "headers": {
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
+                "authorization": "Bearer undefined",
+                "content-type": "application/json",
+                "sec-ch-ua": "\"Chromium\";v=\"112\", \"Google Chrome\";v=\"112\", \"Not:A-Brand\";v=\"99\"",
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": "\"Windows\"",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "Referer": "https://wrtn.ai/",
+                "Referrer-Policy": "strict-origin-when-cross-origin"
             }
-            else throw new Error("No roomId was found.")
-        } catch (e) {
-            throw new Error("No roomId was found."+e)
-        }
+        });
+
+        return response.data
+    } catch (e) {
+        throw new Error("Unknown error."+e)
     }
 }
