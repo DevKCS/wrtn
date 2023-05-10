@@ -27,7 +27,11 @@ export class wrtn {
             throw new Error("Login failed.")
         }
     }
-
+    /**
+     * @param email 사용자의 이메일
+     * @param password 사용자의 비밀번호
+     * @returns {Promise<boolean>} 로그인 성공 여부
+     */
     async loginByEmail(email,password) {
         try {
             const response = await axios.post("https://api.wow.wrtn.ai/auth/local", {
@@ -57,24 +61,31 @@ export class wrtn {
             throw new Error("Login failed.")
         }
     }
-
     /**
-     * @param {String} email
-     * @returns {Promise<String>}
+     * @returns {Promise<Boolean>} 토큰 갱신을 시도합니다.
      */
-    async checkEmail(email) {
+    async refresh() {
         try {
-            const response = await axios.get("https://api.wow.wrtn.ai/auth/check?email="+email, {
-                headers: {
+            const response = await axios.post("https://api.wow.wrtn.ai/auth/refresh", {},{
+                "headers": {
                     "accept": "application/json, text/plain, */*",
                     "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
-                    "authorization": "Bearer undefined",
+                    "content-type": "application/x-www-form-urlencoded",
+                    "refresh": this.refresh_token,
+                    "sec-ch-ua": "\"Chromium\";v=\"112\", \"Google Chrome\";v=\"112\", \"Not:A-Brand\";v=\"99\"",
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": "\"Windows\"",
+                    "sec-fetch-dest": "empty",
+                    "sec-fetch-mode": "cors",
+                    "sec-fetch-site": "same-site",
+                    "Referer": "https://wrtn.ai/",
+                    "Referrer-Policy": "strict-origin-when-cross-origin"
                 },
             });
-            let data = response.data
-            return data;
+            this.loginToken = response.data.data.accessToken;
+            return true;
         } catch (e) {
-            throw new Error("Unknown error.")
+            throw new Error("Login failed.")
         }
     }
 
@@ -302,10 +313,9 @@ export class wrtn {
 }
 
 function generateGAClientId() {
-    var timestamp = Math.floor(Date.now() / 1000); // 현재 시간을 초 단위로 변환
-    var randomNumber = Math.floor(Math.random() * 10000000000); // 0부터 9999999999 사이의 랜덤한 정수 생성
+    var timestamp = Math.floor(Date.now() / 1000);
+    var randomNumber = Math.floor(Math.random() * 10000000000);
     var clientId = "GA1.1." + randomNumber + "." + timestamp; // 클라이언트 ID 문자열 생성
-
     return clientId;
 }
 export async function addAccount(email, password) {
