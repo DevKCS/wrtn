@@ -268,33 +268,22 @@ export class wrtn {
     }
     /**
      * @param {String} question
-     * @param {"요약"|"유의어대체"|"서론"|"본론"|"유튜브제목"|"유튜브설명"|"유튜브타임라인"|"유튜브시나리오"|"유튜브숏츠"|"유튜브목차"|"레포트목차"|"레포트서론"|"레포트본론"|"레포트결론"|"블로그작성"|"댓글답변"|"창업아이디어"|"음식소개"} toolName 
+     * @param {String} toolName
      * @returns {Promise<String>}
     */
-    async tool(question, toolName) {
-        let tool = {
-            "요약" : "634d052b2f219e52e4d168ba", //글을 요약해줍니다.
-            "유의어대체": "62fcca9f9bc6216afc166125", //단어를 입력하면 비슷한 의미의 단어로 대체해줍니다.
-            "서론": "62fb768577ba1530712e7434", //주제를 입력하면 서론을 작성해줍니다.
-            "본론": "63031912761523758a7f4436", //주제를 입력하면 본론을 작성해줍니다
-            "유튜브제목": "636c5a189a81670e5192f458", //주제를 입력하면 유튜브 제목을 작성해줍니다.
-            "유튜브설명": "636c5f05f846e2aa5c100430", //주제를 입력하면 유튜브 설명을 작성해줍니다.
-            "유튜브타임라인": "636c601adac8675d61ea9c7a", //주제를 입력하면 유튜브 타임라인/설명을 작성해줍니다.
-            "유튜브시나리오": "636c64b02e874093ae83b23f", //소재를 입력하면 유튜브 주제/시나리오을 작성해줍니다.
-            "유튜브숏츠": "6412d6dc1303f7d56aa62b9a", //주제를 입력하면 유튜브 숏츠 대본을 작성해줍니다.
-            "레포트목차": "6412b907270278c8665625cf", //주제를 입력하면 레포트 목차를 작성해줍니다.
-            "레포트서론": "6412b9b1523f70691c36a74a", //주제를 입력하면 레포트 서론을 작성해줍니다.
-            "레포트본론": "6412bac49e6800c993d24848", //주제를 입력하면 레포트 본론을 작성해줍니다.
-            "레포트결론": "6412ba4488ec311b00c2b39a", //주제를 입력하면 레포트 결론을 작성해줍니다.
-            "블로그작성": "63b2b5587b66829fa8483b89", //주제를 입력하면 블로그의 내용을 작성해줍니다.
-            "댓글답변": "636c9292fb58cf055a87f6cb", //댓글을 입력하면 댓글에 알맞는 답변을 작성해줍니다.
-            "창업아이디어": "62fb6fb077ba1530712e7382", //관심 분야를 입력하면 관심 분야에 알맞는 창업 아이디어를 작성해줍니다.
-            "음식소개": "62fb5ee50a234c105d03c66c", //음식 이름을 입력하면 음식 소개글을 작성해줍니다.
-        }
+    async tool(question, toolId) {
         if (this.loginToken == undefined) throw new Error("Login failed.")
-        if(!(toolName in tool)) throw new Error("No toolName was found.")
+        let tool = (await axios.get('https://api.wow.wrtn.ai/tool', {
+            headers: {
+                'Authorization': 'Bearer ' + this.loginToken,
+                'Content-Type': 'application/json'
+            }
+        })).data.data.map((e) => {
+            return {id:e._id,name:e.name}
+        })
+        if(!(tool.some(obj => obj["id"] === toolId))) throw new Error("No toolName was found.")
         try {
-            const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/tool/'+tool[toolName], {
+            const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/tool/'+toolId, {
                 "inputs": [
                   question
                 ],
@@ -309,6 +298,22 @@ export class wrtn {
         } catch (e) {
             throw new Error("Login failed.")
         }
+    }
+
+    /**
+     * @return 툴 목록을 반환
+     */
+    async toolList() {
+        if (this.loginToken == undefined) throw new Error("Login failed.")
+        let tool = (await axios.get('https://api.wow.wrtn.ai/tool', {
+            headers: {
+                'Authorization': 'Bearer ' + this.loginToken,
+                'Content-Type': 'application/json'
+            }
+        })).data.data.map((e) => {
+            return {id:e._id,name:e.name}
+        })
+        return tool
     }
 }
 
