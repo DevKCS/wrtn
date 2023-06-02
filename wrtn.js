@@ -1,4 +1,5 @@
 import axios from "axios";
+import * as fs from "fs";
 
 export class wrtn {
     constructor(access_token, refresh_token) {
@@ -32,7 +33,7 @@ export class wrtn {
      * @param password 사용자의 비밀번호
      * @returns {Promise<boolean>} 로그인 성공 여부
      */
-    async loginByEmail(email,password) {
+    async loginByEmail(email, password) {
         try {
             const response = await axios.post("https://api.wow.wrtn.ai/auth/local", {
                 email: email,
@@ -56,6 +57,23 @@ export class wrtn {
             this.access_token = response.data.data.accessToken;
             this.refresh_token = response.data.data.refreshToken;
             await this.Login();
+            const user = await axios.get("https://api.wow.wrtn.ai/user", {
+                "headers": {
+                    "accept": "application/json, text/plain, */*",
+                    "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
+                    'authorization': 'Bearer ' + this.loginToken,
+                    "content-type": "application/json",
+                    "sec-ch-ua": "\"Chromium\";v=\"112\", \"Google Chrome\";v=\"112\", \"Not:A-Brand\";v=\"99\"",
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": "\"Windows\"",
+                    "sec-fetch-dest": "empty",
+                    "sec-fetch-mode": "cors",
+                    "sec-fetch-site": "same-site",
+                    "Referer": "https://wrtn.ai/",
+                    "Referrer-Policy": "strict-origin-when-cross-origin"
+                },
+            });
+            this.email = user.data.data.email
             return true;
         } catch (e) {
             throw new Error("Login failed.")
@@ -66,7 +84,7 @@ export class wrtn {
      */
     async refresh() {
         try {
-            const response = await axios.post("https://api.wow.wrtn.ai/auth/refresh", {},{
+            const response = await axios.post("https://api.wow.wrtn.ai/auth/refresh", {}, {
                 "headers": {
                     "accept": "application/json, text/plain, */*",
                     "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
@@ -163,12 +181,71 @@ export class wrtn {
      * @param {String} question 질문 내용
      * @param {"GPT3.5"|"GPT4.0"} type 답변할 언어 모델
      * @param {String} roomId 방 ID
+     * @param {String | undefined} fileId 파일 ID
      * @returns {Promise<String>} 질문의 답변을 반환합니다.
      */
-    async ask(question, type, roomId) {
+    async ask(question, type, roomId, fileId) {
+        if (this.loginToken == undefined) throw new Error("Login failed.")
+        if (fileId == undefined) {
+            try {
+                const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/stream/' + roomId + '?type=big&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
+                    message: question.replace(/그려줘/gi, "그려.줘").replace(/draw/gi, "dra.w"),
+                    reroll: false
+                }, {
+                    headers: {
+                        'Authorization': 'Bearer ' + this.loginToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                let arr = response.data.trim().split('\n\n')
+                arr.shift();
+                return arr.map(e => {
+                    const data = e.split('\n')[1].match(/data: (.*)/s)
+
+                    if (data === null) throw new Error("No roomId was found.")
+
+                    const raw = JSON.parse(data[1])
+
+                    return raw.chunk;
+                }).join('')
+            } catch (e) {
+                throw new Error("No roomId was found.")
+            }
+        } else {
+            try {
+                const response = await axios.post('https://william.wow.wrtn.ai/generate/file/' + fileId + '/chat/' + roomId + '/stream', {
+                    message: question.replace(/그려줘/gi, "그려.줘").replace(/draw/gi, "dra.w"),
+                    reroll: false
+                }, {
+                    headers: {
+                        'Authorization': 'Bearer ' + this.loginToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                let arr = response.data.trim().split('\n')
+                return arr.map(e => {
+                    const data = e.match(/data: (.*)/s)
+                    if (e.includes("[DONE]")) return;
+                    if (data === null) return;
+                    const raw = JSON.parse(data[1])
+                    return raw.choices[0]?.delta?.token == undefined ? "" : raw.choices[0]?.delta?.token;
+                }).join('')
+            } catch (e) {
+                throw new Error("No roomId, fileId was found.")
+            }
+        }
+    }
+
+    /**
+     * 
+     * @param {String} question 질문 내용
+     * @param {String} roomId 방 ID
+     * @returns {Promise<String>} 질문의 답변을 반환합니다.
+     */
+    async askWithSearch(question,roomId) {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         try {
-            const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/stream/' + roomId + '?type=big&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
+            const response = await axios.post('https://william.wow.wrtn.ai/generate/plugin/'+roomId+'?platform=web&user='+this.email, {
                 message: question.replace(/그려줘/gi, "그려.줘").replace(/draw/gi, "dra.w"),
                 reroll: false
             }, {
@@ -177,32 +254,23 @@ export class wrtn {
                     'Content-Type': 'application/json'
                 }
             });
-            let arr = response.data.trim().split('\n\n')
-            arr.shift();
-            return arr.map(e => {
-                const data = e.split('\n')[1].match(/data: (.*)/s)
-
-                if (data === null) throw new Error("No roomId was found.")
-
-                const raw = JSON.parse(data[1])
-
-                return raw.chunk;
-            }).join('')
+            return response.data.data.content
         } catch (e) {
-            throw new Error("No roomId was found.")
+            throw new Error("No roomId was found."+e)
         }
     }
+
     /**
      * @param {"GPT3.5"|"GPT4.0"} type 답변할 언어 모델
      * @param {String} roomId 방 ID
      * @returns {Promise<String>} 질문의 답변을 반환합니다.
      */
-    async reAsk(type,roomId) {
+    async reAsk(type, roomId) {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         try {
             const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/stream/' + roomId + '?type=mini&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
                 reroll: true,
-                message:""
+                message: ""
             }, {
                 headers: {
                     'Authorization': 'Bearer ' + this.loginToken,
@@ -266,54 +334,64 @@ export class wrtn {
             throw new Error("No roomId was found.")
         }
     }
-    /**
-     * @param {String} question
-     * @param {String} toolName
-     * @returns {Promise<String>}
-    */
-    async tool(question, toolId) {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        let tool = (await axios.get('https://api.wow.wrtn.ai/tool', {
-            headers: {
-                'Authorization': 'Bearer ' + this.loginToken,
-                'Content-Type': 'application/json'
-            }
-        })).data.data.map((e) => {
-            return {id:e._id,name:e.name}
-        })
-        if(!(tool.some(obj => obj["id"] === toolId))) throw new Error("No toolName was found.")
+    async upload(fileBuffer) {
+        if (this.loginToken === undefined) {
+            throw new Error("Login failed.");
+        }
+
         try {
-            const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/tool/'+toolId, {
-                "inputs": [
-                  question
-                ],
-                "options": []
-              }, {
+            const response = await axios.get('https://william.wow.wrtn.ai/generate/file/upload?extension=pdf', {
                 headers: {
-                    'Authorization': 'Bearer ' + this.loginToken,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.loginToken}`
                 }
             });
-            return response.data.data.originOutput
-        } catch (e) {
-            throw new Error("Login failed.")
-        }
-    }
 
-    /**
-     * @return 툴 목록을 반환
-     */
-    async toolList() {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        let tool = (await axios.get('https://api.wow.wrtn.ai/tool', {
-            headers: {
-                'Authorization': 'Bearer ' + this.loginToken,
-                'Content-Type': 'application/json'
-            }
-        })).data.data.map((e) => {
-            return {id:e._id,name:e.name}
-        })
-        return tool
+            let data = response.data.data;
+            const url = data.fileUploadUrl;
+
+            const s3Response = await axios.put(url, fileBuffer, {
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                },
+            });
+
+            let roomId = await this.addRoom();
+
+            const response3 = (await axios.post('https://william.wow.wrtn.ai/generate/file', {
+                "fileUUID": data.fileUUID,
+                "fileName": "filename.pdf",
+                "chatId": roomId,
+                "fileExtension": "pdf"
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.loginToken}`
+                }
+            })).data.data
+
+            return new Promise((resolve, reject) => {
+                const interval = setInterval(async () => {
+                    try {
+                        const response2 = (await axios.get(`https://william.wow.wrtn.ai/generate/file/` + response3.fileId + `/chat/${roomId}`, {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${this.loginToken}`
+                            }
+                        })).data;
+                        if (response2?.data?.progress === 100) {
+                            clearInterval(interval);
+                            resolve(response3.fileId);
+                        }
+                    } catch (error) {
+                        clearInterval(interval);
+                        reject(error);
+                    }
+                }, 1000);
+            });
+        } catch (e) {
+            throw new Error("No roomId was found.");
+        }
     }
 }
 
@@ -325,7 +403,7 @@ function generateGAClientId() {
 }
 export async function addAccount(email, password) {
     try {
-        const emailCheck = (await axios.get('https://api.wow.wrtn.ai/auth/check?email=' + email,{
+        const emailCheck = (await axios.get('https://api.wow.wrtn.ai/auth/check?email=' + email, {
             "headers": {
                 "accept": "application/json, text/plain, */*",
                 "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5",
@@ -345,7 +423,7 @@ export async function addAccount(email, password) {
         if (emailCheck.result != "SUCCESS") throw new Error("Email already exists.")
         if (emailCheck.data != null) throw new Error("Email already exists.")
 
-        const response = await axios.post('https://api.wow.wrtn.ai/auth/register?deviceId='+generateGAClientId(), {
+        const response = await axios.post('https://api.wow.wrtn.ai/auth/register?deviceId=' + generateGAClientId(), {
             email: email,
             password: password,
         }, {
@@ -367,6 +445,6 @@ export async function addAccount(email, password) {
 
         return response.data
     } catch (e) {
-        throw new Error("Unknown error."+e)
+        throw new Error("Unknown error." + e)
     }
 }
