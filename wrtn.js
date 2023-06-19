@@ -1,5 +1,4 @@
 import axios from "axios";
-import * as fs from "fs";
 
 export class wrtn {
     constructor(access_token, refresh_token) {
@@ -113,7 +112,7 @@ export class wrtn {
     async addRoom() {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         try {
-            const response = (await axios.post("https://api.wrtn.ai/chat", null, {
+            const response = (await axios.post("https://api.wow.wrtn.ai/chat", null, {
                 headers: {
                     'accept': 'application/json, text/plain, */*',
                     'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5',
@@ -139,7 +138,7 @@ export class wrtn {
     async roomList() {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         try {
-            const response = await axios.get("https://api.wrtn.ai/chat", {
+            const response = await axios.get("https://api.wow.wrtn.ai/chat", {
                 headers: {
                     'accept': 'application/json, text/plain, */*',
                     'authorization': "Bearer " + this.loginToken,
@@ -164,7 +163,7 @@ export class wrtn {
     async removeRoom(roomId) {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         try {
-            const response = await axios.delete("https://api.wrtn.ai/chat/" + roomId, {
+            const response = await axios.delete("https://api.wow.wrtn.ai/chat/" + roomId, {
                 headers: {
                     'accept': 'application/json, text/plain, */*',
                     'authorization': "Bearer " + this.loginToken,
@@ -188,7 +187,7 @@ export class wrtn {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         if (fileId == undefined) {
             try {
-                const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/stream/' + roomId + '?type=big&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
+                const response = await axios.post('https://william.wow.wrtn.ai/generate/stream2/' + roomId + '?type=big&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
                     message: question.replace(/그려줘/gi, "그려.줘").replace(/draw/gi, "dra.w"),
                     reroll: false
                 }, {
@@ -200,7 +199,7 @@ export class wrtn {
                 let arr = response.data.trim().split('\n\n')
                 arr.shift();
                 return arr.map(e => {
-                    const data = e.split('\n')[1].match(/data: (.*)/s)
+                    const data = e.match(/data: (.*)/s)
 
                     if (data === null) throw new Error("No roomId was found.")
 
@@ -209,7 +208,7 @@ export class wrtn {
                     return raw.chunk;
                 }).join('')
             } catch (e) {
-                throw new Error("No roomId was found.")
+                throw new Error("No roomId was found."+e)
             }
         } else {
             try {
@@ -268,7 +267,7 @@ export class wrtn {
     async reAsk(type, roomId) {
         if (this.loginToken == undefined) throw new Error("Login failed.")
         try {
-            const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/stream/' + roomId + '?type=mini&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
+            const response = await axios.post('https://william.wrtn.ai/generate/stream/' + roomId + '?type=mini&model=' + (type == "GPT4.0" ? "GPT4" : "GPT3.5"), {
                 reroll: true,
                 message: ""
             }, {
@@ -298,42 +297,43 @@ export class wrtn {
      * @param {String} roomId 방 ID
      * @returns {Promise<Array>} 생성된 그림 링크 4개를 반환합니다.
      */
-    async art(prompt, roomId) {
-        if (this.loginToken == undefined) throw new Error("Login failed.")
-        try {
-            const response = await axios.post('https://gen-api-prod.wrtn.ai/generate/stream/' + roomId + '?type=big&model=GPT4', {
-                message: prompt + " 그려줘",
-                reroll: false
-            }, {
-                headers: {
-                    'Authorization': 'Bearer ' + this.loginToken,
-                    'Content-Type': 'application/json'
-                },
-                responseType: 'stream'
-            });
+    // async art(prompt, roomId) {
+    //     if (this.loginToken == undefined) throw new Error("Login failed.")
+    //     try {
+    //         console.log('https://william.wrtn.ai/generate/stream2/' + roomId + '?type=big&model=GPT4&platform=web&user='+this.email)
+    //         const response = await axios.post('https://william.wrtn.ai/generate/stream2/' + roomId + '?type=big&model=GPT4&platform=web&user='+this.email, {
+    //             message: prompt + " 그려줘",
+    //             reroll: false
+    //         }, {
+    //             headers: {
+    //                 'Authorization': 'Bearer ' + this.loginToken,
+    //                 'Content-Type': 'application/json'
+    //             },
+    //             responseType: 'stream'
+    //         });
 
-            let data = '';
-            response.data.on('data', (chunk) => {
-                chunk = chunk.toString();
-                if (chunk.includes("imageUrls")) {
-                    data = (chunk.slice(chunk.indexOf(`"imageUrls":`) + 12, chunk.indexOf(`"liked":false}]}}`) + 15));
-                }
-            });
+    //         let data = '';
+    //         response.data.on('data', (chunk) => {
+    //             chunk = chunk.toString();
+    //             if (chunk.includes("imageUrls")) {
+    //                 data = (chunk.slice(chunk.indexOf(`"imageUrls":`) + 12, chunk.indexOf(`"liked":false}]}}`) + 15));
+    //             }
+    //         });
 
-            return new Promise((resolve, reject) => {
-                response.data.on('end', () => {
-                    resolve(JSON.parse(data).map((e) => {
-                        return e.url
-                    }));
-                });
-                response.data.on('error', (err) => {
-                    reject(err);
-                });
-            });
-        } catch (e) {
-            throw new Error("No roomId was found.")
-        }
-    }
+    //         return new Promise((resolve, reject) => {
+    //             response.data.on('end', () => {
+    //                 resolve(JSON.parse(data).map((e) => {
+    //                     return e.url
+    //                 }));
+    //             });
+    //             response.data.on('error', (err) => {
+    //                 reject(err);
+    //             });
+    //         });
+    //     } catch (e) {
+    //         throw new Error("No roomId was found."+e)
+    //     }
+    // }
     async upload(fileBuffer) {
         if (this.loginToken === undefined) {
             throw new Error("Login failed.");
